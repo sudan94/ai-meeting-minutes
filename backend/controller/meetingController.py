@@ -237,3 +237,25 @@ def getMeeting(id: int, db: Session):
         return meeting
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch meeting: {str(e)}")
+
+def deleteMeeting(id: int, session: Session):
+    meeting = session.query(Meeting).filter(Meeting.id == id).first()
+    if not meeting:
+        return False
+
+    # Delete the audio file if it exists
+    # if meeting.audio_path and os.path.exists(meeting.audio_path):
+    #     os.remove(meeting.audio_path)
+
+    # Delete the meeting record
+    session.delete(meeting)
+    session.commit()
+    return True
+
+def process_meeting(meeting_id: int, session: Session):
+    # This is where you would implement the actual processing logic
+    # For now, we'll just update the status
+    meeting = session.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if meeting:
+        meeting.status = "completed"
+        session.commit()

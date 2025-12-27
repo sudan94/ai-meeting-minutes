@@ -7,36 +7,37 @@ import {
   List,
   ListItem,
   ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
   CircularProgress,
   Alert,
   Button,
   LinearProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-
-interface Meeting {
-  id: string;
-  filename: string;
-  created_at: string;
-  title: string;
-  summary?: string;
-}
+import { Delete as DeleteIcon } from '@mui/icons-material';
+import { api, Meeting } from '../services/api';
 
 interface ProcessingStatus {
-  status: 'pending' | 'processing' | 'completed' | 'error';
+  status: string;
   progress: number;
-  result?: any;
-  error?: string;
   meeting_id?: number;
   filename?: string;
+  error?: string;
 }
 
-const MeetingList = () => {
+const MeetingList: React.FC = () => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingTasks, setProcessingTasks] = useState<{ [key: string]: ProcessingStatus }>({});
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
   const navigate = useNavigate();
 
   // Initial load of meetings and check for processing tasks
@@ -118,20 +119,11 @@ const MeetingList = () => {
 
   const fetchMeetings = async () => {
     try {
-      const response = await axios.get<Meeting[]>('http://localhost:8000/meeting/get_meetings');
-      console.log('Meetings response:', response.data); // Debug log
-
-      if (response.data) {
-        setMeetings(response.data);
-        setError(null);
-      } else {
-        setError('No meetings data received');
-        setMeetings([]);
-      }
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError('Failed to fetch meetings. Please try again later.');
-      setMeetings([]);
+      const data = await api.getMeetings();
+      setMeetings(data);
+    } catch (error) {
+      console.error('Error fetching meetings:', error);
+      setError('Failed to fetch meetings');
     } finally {
       setLoading(false);
     }
@@ -143,6 +135,34 @@ const MeetingList = () => {
       ...prev,
       [taskId]: { status: 'pending', progress: 0 }
     }));
+  };
+
+  const handleMeetingClick = (meetingId: number) => {
+    navigate(`/meetings/${meetingId}`);
+  };
+
+  const handleDeleteClick = (event: React.MouseEvent, meeting: Meeting) => {
+    event.stopPropagation();
+    setMeetingToDelete(meeting);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (meetingToDelete) {
+      try {
+        await api.deleteMeeting(meetingToDelete.id);
+        setMeetings(meetings.filter(m => m.id !== meetingToDelete.id));
+      } catch (error) {
+        console.error('Error deleting meeting:', error);
+      }
+    }
+    setDeleteDialogOpen(false);
+    setMeetingToDelete(null);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setMeetingToDelete(null);
   };
 
   return (
@@ -206,11 +226,11 @@ const MeetingList = () => {
               <CardContent>
                 <ListItem>
                   <ListItemText
-                    primary={meeting.filename}
+                    primary={meeting.title}
                     secondary={
                       <>
                         <Typography component="span" variant="body2" color="text.primary">
-                          Title: <Link to={`/meetings/${meeting.id}`}>{meeting.title}</Link>
+                          Status: {meeting.status}
                         </Typography>
                         <br />
                         <Typography component="span" variant="body2" color="text.secondary">
@@ -219,17 +239,37 @@ const MeetingList = () => {
                       </>
                     }
                   />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      aria-label="delete"
+                      onClick={(e) => handleDeleteClick(e, meeting)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
                 </ListItem>
-                {meeting.summary && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                    Summary: {meeting.summary}
-                  </Typography>
-                )}
               </CardContent>
             </Card>
           ))}
         </List>
       )}
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+      >
+        <DialogTitle>Delete Meeting</DialogTitle>
+        <DialogContent>
+          Are you sure you want to delete this meeting? This action cannot be undone.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} color="error">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

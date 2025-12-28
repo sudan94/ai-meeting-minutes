@@ -60,6 +60,7 @@ async def process_upload_background(file_content: bytes, filename: str, task_id:
         transcription_data = TranscriptionCreate(
             transcript=result["text"],
             file_name=filename,
+            uuid = meeting_uuid
         )
 
         stored_transcription = create_transcription(transcription_data, db)

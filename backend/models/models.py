@@ -22,4 +22,5 @@ class Transcription(Base):
     id = Column(Integer, primary_key=True, index=True)
     file_name = Column(String, nullable=True)
     transcript = Column(Text, nullable=False)
+    uuid = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)

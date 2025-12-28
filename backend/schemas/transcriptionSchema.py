@@ -4,6 +4,7 @@ from datetime import datetime
 class TranscriptionBase(BaseModel):
     transcript : str
     file_name : str
+    uuid : str
 
 class TranscriptionCreate(TranscriptionBase):
     pass

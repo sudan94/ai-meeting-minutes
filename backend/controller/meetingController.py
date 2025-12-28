@@ -245,20 +245,17 @@ def deleteMeeting(id: int, session: Session):
     meeting = session.query(Meeting).filter(Meeting.id == id).first()
     if not meeting:
         return False
+    else:
+        transcript = session.query(Transcription).filter(Transcription.id == meeting.transcript_id).first()
+
 
     # Delete the audio file if it exists
-    # if meeting.audio_path and os.path.exists(meeting.audio_path):
-    #     os.remove(meeting.audio_path)
+    dt = transcript.created_at
+    audio_path = Path("recordings") / dt.strftime("%Y") / dt.strftime("%m") / transcript.uuid / transcript.file_name
+    if os.path.exists(audio_path):
+        os.remove(audio_path)
 
     # Delete the meeting record
     session.delete(meeting)
     session.commit()
     return True
-
-def process_meeting(meeting_id: int, session: Session):
-    # This is where you would implement the actual processing logic
-    # For now, we'll just update the status
-    meeting = session.query(Meeting).filter(Meeting.id == meeting_id).first()
-    if meeting:
-        meeting.status = "completed"
-        session.commit()

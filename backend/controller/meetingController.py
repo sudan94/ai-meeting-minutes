@@ -12,6 +12,8 @@ from dateutil.parser import parse
 import json
 from dotenv import load_dotenv
 from typing import Dict, List
+import uuid
+from pathlib import Path
 
 load_dotenv()
 # Load Whisper Model (for Speech-to-Text)
@@ -34,10 +36,15 @@ async def process_upload_background(file_content: bytes, filename: str, task_id:
             "filename": filename
         }
 
+        meeting_uuid = str(uuid.uuid4())
         now = datetime.now()
-        date = now.strftime("%m/%d/%Y, %H:%M:%S")
-        date_clean = date.replace(":", "-").replace("T", "_")
-        directory = f"recordings/{date_clean}"
+        directory = (
+            Path("recordings")
+            / now.strftime("%Y")
+            / now.strftime("%m")
+            / meeting_uuid
+        )
+
         os.makedirs(directory, exist_ok=True)
         file_path = f"{directory}/{filename}"
 
@@ -49,11 +56,6 @@ async def process_upload_background(file_content: bytes, filename: str, task_id:
         # Convert Speech to Text
         result = whisper_model.transcribe(file_path, fp16=False)
         processing_status[task_id]["progress"] = 50
-
-        try:
-            date_obj = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S")
-        except ValueError:
-            date_obj = parse(date)
 
         transcription_data = TranscriptionCreate(
             transcript=result["text"],

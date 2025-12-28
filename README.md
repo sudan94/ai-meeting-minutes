@@ -69,7 +69,7 @@ yarn install
 1. Make sure you're in the backend directory and your virtual environment is activated
 2. Start the FastAPI server:
 ```bash
-uvicorn main:app --reload
+python -m uvicorn main:app --reload
 ```
 The backend will be available at `http://localhost:8000`
 

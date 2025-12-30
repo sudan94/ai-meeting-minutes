@@ -222,9 +222,17 @@ const MeetingList: React.FC = () => {
       ) : (
         <List>
           {meetings.map((meeting) => (
-            <Card key={meeting.id} sx={{ mb: 2 }}>
+            <Card key={meeting.id} sx={{ mb: 2, cursor: 'pointer' }}>
               <CardContent>
-                <ListItem>
+                <ListItem
+                  component={Link}
+                  to={`/meetings/${meeting.id}`}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                  }}
+                >
                   <ListItemText
                     primary={meeting.title}
                     secondary={

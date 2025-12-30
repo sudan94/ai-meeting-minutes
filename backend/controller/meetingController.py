@@ -245,15 +245,15 @@ def deleteMeeting(id: int, session: Session):
     meeting = session.query(Meeting).filter(Meeting.id == id).first()
     if not meeting:
         return False
-    else:
-        transcript = session.query(Transcription).filter(Transcription.id == meeting.transcript_id).first()
 
+    transcript = session.query(Transcription).filter(Transcription.id == meeting.transcript_id).first()
 
     # Delete the audio file if it exists
-    dt = transcript.created_at
-    audio_path = Path("recordings") / dt.strftime("%Y") / dt.strftime("%m") / transcript.uuid / transcript.file_name
-    if os.path.exists(audio_path):
-        os.remove(audio_path)
+    if transcript and transcript.created_at:
+        dt = transcript.created_at
+        audio_path = Path("recordings") / dt.strftime("%Y") / dt.strftime("%m") / transcript.uuid / transcript.file_name
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
 
     # Delete the meeting record
     session.delete(meeting)

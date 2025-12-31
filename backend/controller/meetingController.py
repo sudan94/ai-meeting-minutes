@@ -225,10 +225,18 @@ def process_transcirption(transcription_id: int, db: Session):
         "created_at": new_meeting.created_at
     }
 
-def getMeetings(db: Session):
+def getMeetings(db: Session, skip: int = 0, limit: int = 5):
     try:
-        meetings = db.query(Meeting).all()
-        return meetings
+        # Get total count
+        total = db.query(Meeting).count()
+
+        # Get paginated meetings
+        meetings = db.query(Meeting).order_by(Meeting.date.desc()).offset(skip).limit(limit).all()
+
+        return {
+            "total": total,
+            "meetings": meetings
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch meetings: {str(e)}")
 

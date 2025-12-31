@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Pagination,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -38,13 +39,31 @@ const MeetingList: React.FC = () => {
   const [processingTasks, setProcessingTasks] = useState<{ [key: string]: ProcessingStatus }>({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 5;
   const navigate = useNavigate();
+
+  const fetchMeetings = useCallback(async (currentPage: number) => {
+    try {
+      setLoading(true);
+      const skip = (currentPage - 1) * itemsPerPage;
+      const data = await api.getMeetings(skip, itemsPerPage);
+      setMeetings(data.meetings);
+      setTotalCount(data.total);
+    } catch (error) {
+      console.error('Error fetching meetings:', error);
+      setError('Failed to fetch meetings');
+    } finally {
+      setLoading(false);
+    }
+  }, [itemsPerPage]);
 
   // Initial load of meetings and check for processing tasks
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        await fetchMeetings();
+        await fetchMeetings(1);
 
         // Check for any ongoing processing tasks from localStorage
         const currentTaskId = localStorage.getItem('currentProcessingTask');
@@ -59,7 +78,12 @@ const MeetingList: React.FC = () => {
     };
 
     loadInitialData();
-  }, []);
+  }, [fetchMeetings]);
+
+  // Fetch meetings when page changes
+  useEffect(() => {
+    fetchMeetings(page);
+  }, [page, fetchMeetings]);
 
   // Set up interval for checking processing status
   useEffect(() => {
@@ -84,7 +108,7 @@ const MeetingList: React.FC = () => {
             delete newTasks[taskId];
             return newTasks;
           });
-          await fetchMeetings();
+          await fetchMeetings(page);
 
           // If we have a meeting ID, navigate to it
           if (response.data.meeting_id) {
@@ -117,17 +141,6 @@ const MeetingList: React.FC = () => {
     }
   };
 
-  const fetchMeetings = async () => {
-    try {
-      const data = await api.getMeetings();
-      setMeetings(data);
-    } catch (error) {
-      console.error('Error fetching meetings:', error);
-      setError('Failed to fetch meetings');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const addProcessingTask = (taskId: string) => {
     console.log('Adding processing task:', taskId); // Debug log
@@ -151,7 +164,8 @@ const MeetingList: React.FC = () => {
     if (meetingToDelete) {
       try {
         await api.deleteMeeting(meetingToDelete.id);
-        setMeetings(meetings.filter(m => m.id !== meetingToDelete.id));
+        // Refresh the current page after deletion
+        await fetchMeetings(page);
       } catch (error) {
         console.error('Error deleting meeting:', error);
       }
@@ -164,6 +178,12 @@ const MeetingList: React.FC = () => {
     setDeleteDialogOpen(false);
     setMeetingToDelete(null);
   };
+
+  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value);
+  };
+
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
@@ -261,6 +281,19 @@ const MeetingList: React.FC = () => {
             </Card>
           ))}
         </List>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            size="large"
+          />
+        </Box>
       )}
 
       <Dialog

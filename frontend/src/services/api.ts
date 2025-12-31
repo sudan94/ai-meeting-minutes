@@ -12,6 +12,11 @@ export interface Meeting {
   summary?: string;
 }
 
+export interface MeetingsResponse {
+  total: number;
+  meetings: Meeting[];
+}
+
 export const api = {
   async uploadAudio(file: File): Promise<Meeting> {
     const formData = new FormData();
@@ -24,9 +29,11 @@ export const api = {
     return response.data as Meeting;
   },
 
-  async getMeetings(): Promise<Meeting[]> {
-    const response = await axios.get(`${API_BASE_URL}/get_meetings`);
-    return response.data as Meeting[];
+  async getMeetings(skip: number = 0, limit: number = 5): Promise<MeetingsResponse> {
+    const response = await axios.get(`${API_BASE_URL}/get_meetings`, {
+      params: { skip, limit },
+    });
+    return response.data as MeetingsResponse;
   },
 
   async getMeeting(id: number): Promise<Meeting> {

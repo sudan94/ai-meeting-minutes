@@ -22,8 +22,8 @@ def get_processing_status(task_id: str):
     return meetingController.get_processing_status(task_id)
 
 @router.get("/get_meetings")
-def get_meetings(session: Session = Depends(get_db)):
-    return meetingController.getMeetings(session)
+def get_meetings(skip: int = 0, limit: int = 10, session: Session = Depends(get_db)):
+    return meetingController.getMeetings(session, skip=skip, limit=limit)
 
 @router.get("/get_meeting_by_id/{id}")
 def get_meeting_by_id(id: int, session: Session = Depends(get_db)):

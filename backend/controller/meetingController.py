@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from typing import Dict, List
 import uuid
 from pathlib import Path
+import requests
 
 load_dotenv()
 # Load Whisper Model (for Speech-to-Text)
@@ -267,3 +268,42 @@ def deleteMeeting(id: int, session: Session):
     session.delete(meeting)
     session.commit()
     return True
+
+def sendMeetingTrello(id: int, session: Session):
+    meeting = session.query(Meeting).filter(Meeting.id == id).first()
+
+    description = f"""
+?? Summary:
+{meeting.summary}
+
+?? Key Points:
+{"".join(f"- {p}\n" for p in json.loads(meeting.key_points))}
+
+? Action Items:
+{"".join(f"- {a}\n" for a in json.loads(meeting.action_items))}
+
+?? Participants:
+{", ".join(json.loads(meeting.participants))}
+"""
+
+    payload = {
+        "idList":  os.getenv("TRELLO_LIST_ID"),
+        "name": meeting.title,
+        "desc": description,
+        "key":  os.getenv("TRELLO_API_KEY"),
+        "token":  os.getenv("TRELLO_API_TOKEN")
+    }
+    headers = {
+        "Accept": "application/json"
+    }
+
+
+    response = requests.post(
+        "https://api.trello.com/1/cards",
+        params=payload,
+        headers = headers
+    )
+
+    response.raise_for_status()
+    return {"status": "created"}
+

@@ -12,7 +12,9 @@ import {
   Paper,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SendIcon from '@mui/icons-material/Send';
 import axios from 'axios';
+import { api } from '../services/api';
 
 interface MeetingDetails {
   id: string;
@@ -32,6 +34,7 @@ const MeetingDetails = () => {
   const [meeting, setMeeting] = useState<MeetingDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sendingToTrello, setSendingToTrello] = useState(false);
 
   useEffect(() => {
     fetchMeetingDetails();
@@ -57,6 +60,22 @@ const MeetingDetails = () => {
     } catch (e) {
       console.error('Error parsing JSON:', e);
       return [];
+    }
+  };
+
+  const handleSendToTrello = async () => {
+    if (!id) return;
+    try {
+      setSendingToTrello(true);
+      await api.sendToTrello(Number(id));
+      setError(null);
+      // You might want to show a success message here
+      alert('Meeting sent to Trello successfully!');
+    } catch (err) {
+      setError('Failed to send meeting to Trello. Please try again later.');
+      console.error('Send to Trello error:', err);
+    } finally {
+      setSendingToTrello(false);
     }
   };
 
@@ -107,14 +126,24 @@ const MeetingDetails = () => {
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
-      <Button
-        variant="outlined"
-        startIcon={<ArrowBackIcon />}
-        onClick={() => navigate('/meetings')}
-        sx={{ mb: 3 }}
-      >
-        Back to Meetings
-      </Button>
+      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+        <Button
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/meetings')}
+        >
+          Back to Meetings
+        </Button>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<SendIcon />}
+          onClick={handleSendToTrello}
+          disabled={sendingToTrello}
+        >
+          {sendingToTrello ? 'Sending...' : 'Send to Trello'}
+        </Button>
+      </Box>
 
       <Card>
         <CardContent>

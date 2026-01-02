@@ -44,4 +44,8 @@ export const api = {
   async deleteMeeting(id: number): Promise<void> {
     await axios.delete(`${API_BASE_URL}/delete_meeting/${id}`);
   },
+
+  async sendToTrello(id: number): Promise<void> {
+    await axios.get(`${API_BASE_URL}/send_to_trello/${id}`);
+  },
 };

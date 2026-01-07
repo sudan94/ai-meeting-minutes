@@ -1,7 +1,7 @@
 from fastapi import HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.models import Transcription, Meeting
+from models.models import Transcription, Meeting, Trello
 from schemas.transcriptionSchema import TranscriptionCreate
 from database import get_db, SessionLocal
 from openai import OpenAI
@@ -250,12 +250,12 @@ def getMeeting(id: int, db: Session):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch meeting: {str(e)}")
 
-def deleteMeeting(id: int, session: Session):
-    meeting = session.query(Meeting).filter(Meeting.id == id).first()
+def deleteMeeting(id: int, db: Session):
+    meeting = db.query(Meeting).filter(Meeting.id == id).first()
     if not meeting:
         return False
 
-    transcript = session.query(Transcription).filter(Transcription.id == meeting.transcript_id).first()
+    transcript = db.query(Transcription).filter(Transcription.id == meeting.transcript_id).first()
 
     # Delete the audio file if it exists
     if transcript and transcript.created_at:
@@ -269,8 +269,8 @@ def deleteMeeting(id: int, session: Session):
     session.commit()
     return True
 
-def sendMeetingTrello(id: int, session: Session):
-    meeting = session.query(Meeting).filter(Meeting.id == id).first()
+def sendMeetingTrello(id: int, db: Session):
+    meeting = db.query(Meeting).filter(Meeting.id == id).first()
 
     description = f"""
 ?? Summary:
@@ -305,5 +305,13 @@ def sendMeetingTrello(id: int, session: Session):
     )
 
     response.raise_for_status()
+
+    new_trello = Trello(
+        meeting_id=id
+    )
+
+    db.add(new_trello)
+    db.commit()
+    db.refresh(new_trello)
     return {"status": "created"}
 

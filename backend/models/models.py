@@ -24,3 +24,10 @@ class Transcription(Base):
     transcript = Column(Text, nullable=False)
     uuid = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+
+class Trello(Base):
+    __tablename__ = "trello"
+
+    id = Column(Integer, primary_key= True, index= True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+

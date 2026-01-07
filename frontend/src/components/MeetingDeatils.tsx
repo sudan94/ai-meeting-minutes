@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Box,
   Card,
@@ -10,11 +10,11 @@ import {
   Button,
   Divider,
   Paper,
-} from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import SendIcon from '@mui/icons-material/Send';
-import axios from 'axios';
-import { api } from '../services/api';
+} from "@mui/material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import SendIcon from "@mui/icons-material/Send";
+import axios from "axios";
+import { api } from "../services/api";
 
 interface MeetingDetails {
   id: string;
@@ -26,6 +26,7 @@ interface MeetingDetails {
   participants?: string;
   key_points?: string;
   action_items?: string;
+  trello?: boolean;
 }
 
 const MeetingDetails = () => {
@@ -42,12 +43,14 @@ const MeetingDetails = () => {
 
   const fetchMeetingDetails = async () => {
     try {
-      const response = await axios.get<MeetingDetails>(`http://localhost:8000/meeting/get_meeting_by_id/${id}`);
+      const response = await axios.get<MeetingDetails>(
+        `http://localhost:8000/meeting/get_meeting_by_id/${id}`
+      );
       setMeeting(response.data);
       setError(null);
     } catch (err) {
-      setError('Failed to fetch meeting details. Please try again later.');
-      console.error('Fetch error:', err);
+      setError("Failed to fetch meeting details. Please try again later.");
+      console.error("Fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -58,7 +61,7 @@ const MeetingDetails = () => {
     try {
       return JSON.parse(jsonString);
     } catch (e) {
-      console.error('Error parsing JSON:', e);
+      console.error("Error parsing JSON:", e);
       return [];
     }
   };
@@ -70,10 +73,10 @@ const MeetingDetails = () => {
       await api.sendToTrello(Number(id));
       setError(null);
       // You might want to show a success message here
-      alert('Meeting sent to Trello successfully!');
+      alert("Meeting sent to Trello successfully!");
     } catch (err) {
-      setError('Failed to send meeting to Trello. Please try again later.');
-      console.error('Send to Trello error:', err);
+      setError("Failed to send meeting to Trello. Please try again later.");
+      console.error("Send to Trello error:", err);
     } finally {
       setSendingToTrello(false);
     }
@@ -81,7 +84,7 @@ const MeetingDetails = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
         <CircularProgress />
       </Box>
     );
@@ -89,14 +92,14 @@ const MeetingDetails = () => {
 
   if (error) {
     return (
-      <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
+      <Box sx={{ maxWidth: 800, mx: "auto", mt: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
         <Button
           variant="contained"
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/meetings')}
+          onClick={() => navigate("/meetings")}
         >
           Back to Meetings
         </Button>
@@ -106,12 +109,12 @@ const MeetingDetails = () => {
 
   if (!meeting) {
     return (
-      <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
+      <Box sx={{ maxWidth: 800, mx: "auto", mt: 4 }}>
         <Alert severity="info">Meeting not found</Alert>
         <Button
           variant="contained"
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/meetings')}
+          onClick={() => navigate("/meetings")}
           sx={{ mt: 2 }}
         >
           Back to Meetings
@@ -125,24 +128,36 @@ const MeetingDetails = () => {
   const actionItems = parseJsonString(meeting.action_items);
 
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
-      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+    <Box sx={{ maxWidth: 800, mx: "auto", mt: 4 }}>
+      <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/meetings')}
+          onClick={() => navigate("/meetings")}
         >
           Back to Meetings
         </Button>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<SendIcon />}
-          onClick={handleSendToTrello}
-          disabled={sendingToTrello}
-        >
-          {sendingToTrello ? 'Sending...' : 'Send to Trello'}
-        </Button>
+        {meeting.trello ? (
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<SendIcon />}
+            onClick={handleSendToTrello}
+            disabled
+          >
+            Already sent to Trello
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<SendIcon />}
+            onClick={handleSendToTrello}
+            disabled={sendingToTrello}
+          >
+            {sendingToTrello ? "Sending..." : "Send to Trello"}
+          </Button>
+        )}
       </Box>
 
       <Card>
@@ -172,9 +187,7 @@ const MeetingDetails = () => {
               <Typography variant="h6" gutterBottom>
                 Summary
               </Typography>
-              <Typography variant="body1">
-                {meeting.summary}
-              </Typography>
+              <Typography variant="body1">{meeting.summary}</Typography>
             </Box>
           )}
 
@@ -183,12 +196,17 @@ const MeetingDetails = () => {
               <Typography variant="h6" gutterBottom>
                 Participants
               </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                 {participants.map((participant, index) => (
                   <Paper
                     key={index}
                     elevation={1}
-                    sx={{ px: 2, py: 1, bgcolor: 'primary.light', color: 'white' }}
+                    sx={{
+                      px: 2,
+                      py: 1,
+                      bgcolor: "primary.light",
+                      color: "white",
+                    }}
                   >
                     {participant}
                   </Paper>

@@ -38,5 +38,4 @@ def delete_meeting(id: int, session: Session = Depends(get_db)):
 
 @router.get("/send_to_trello/{id}")
 def send_to_trello(id:int, session: Session = Depends(get_db)):
-    print("aaa")
     return meetingController.sendMeetingTrello(id, session)

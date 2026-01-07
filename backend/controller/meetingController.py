@@ -244,8 +244,11 @@ def getMeetings(db: Session, skip: int = 0, limit: int = 5):
 def getMeeting(id: int, db: Session):
     try:
         meeting = db.query(Meeting).filter(Meeting.id == id).first()
+        trello = db.query(Trello).filter(Trello.meeting_id == id).first()
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
+        if trello:
+            meeting.trello = True
         return meeting
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch meeting: {str(e)}")
@@ -265,8 +268,8 @@ def deleteMeeting(id: int, db: Session):
             os.remove(audio_path)
 
     # Delete the meeting record
-    session.delete(meeting)
-    session.commit()
+    db.delete(meeting)
+    db.commit()
     return True
 
 def sendMeetingTrello(id: int, db: Session):

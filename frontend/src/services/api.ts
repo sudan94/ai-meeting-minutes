@@ -1,15 +1,18 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/meeting';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/meeting';
 
 export interface Meeting {
   id: number;
   title: string;
-  status: string;
   created_at: string;
-  audio_path?: string;
-  transcript?: string;
+  filename?: string;
   summary?: string;
+  participants?: string;
+  key_points?: string;
+  action_items?: string;
+  transcript?: string;
+  trello?: boolean;
 }
 
 export interface MeetingsResponse {
@@ -18,15 +21,13 @@ export interface MeetingsResponse {
 }
 
 export const api = {
-  async uploadAudio(file: File): Promise<Meeting> {
+  async uploadAudio(file: File): Promise<{ task_id: string; message: string; status: string }> {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await axios.post(`${API_BASE_URL}/upload-audio`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    const response = await axios.post<{ task_id: string; message: string; status: string }>(`${API_BASE_URL}/upload-audio`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return response.data as Meeting;
+    return response.data;
   },
 
   async getMeetings(skip: number = 0, limit: number = 5): Promise<MeetingsResponse> {
@@ -47,5 +48,22 @@ export const api = {
 
   async sendToTrello(id: number): Promise<void> {
     await axios.get(`${API_BASE_URL}/send_to_trello/${id}`);
+  },
+
+  async getProcessingStatus(taskId: string): Promise<{
+    status: string;
+    progress: number;
+    meeting_id?: number;
+    filename?: string;
+    error?: string;
+  }> {
+    const response = await axios.get<{
+      status: string;
+      progress: number;
+      meeting_id?: number;
+      filename?: string;
+      error?: string;
+    }>(`${API_BASE_URL}/processing-status/${taskId}`);
+    return response.data;
   },
 };

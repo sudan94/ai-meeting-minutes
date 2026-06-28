@@ -1,24 +1,19 @@
-from fastapi import HTTPException, Depends, BackgroundTasks
+from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
 from models.models import Transcription, Meeting, Trello
 from schemas.transcriptionSchema import TranscriptionCreate
-from database import get_db, SessionLocal
+from database import SessionLocal
 from openai import OpenAI
-import whisper
 import os
 from datetime import datetime
-from dateutil.parser import parse
 import json
 from dotenv import load_dotenv
-from typing import Dict, List
+from typing import Dict
 import uuid
 from pathlib import Path
 import requests
 
 load_dotenv()
-# Load Whisper Model (for Speech-to-Text)
-whisper_model = whisper.load_model("base")
 
 # Dictionary to store processing status
 processing_status: Dict[str, dict] = {}
@@ -54,20 +49,24 @@ async def process_upload_background(file_content: bytes, filename: str, task_id:
 
         processing_status[task_id]["progress"] = 20
 
-        # Convert Speech to Text
-        result = whisper_model.transcribe(file_path, fp16=False)
+        # Transcribe via OpenAI Whisper API
+        with open(file_path, "rb") as audio_file:
+            transcription_result = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+            )
         processing_status[task_id]["progress"] = 50
 
         transcription_data = TranscriptionCreate(
-            transcript=result["text"],
+            transcript=transcription_result.text,
             file_name=filename,
-            uuid = meeting_uuid
+            uuid=meeting_uuid,
         )
 
         stored_transcription = create_transcription(transcription_data, db)
         processing_status[task_id]["progress"] = 70
 
-        transcript = process_transcirption(stored_transcription.id, db)
+        transcript = process_transcription(stored_transcription.id, db)
         processing_status[task_id]["progress"] = 90
 
         # Get the meeting ID from the transcript result
@@ -91,7 +90,7 @@ async def process_upload_background(file_content: bytes, filename: str, task_id:
     finally:
         db.close()
 
-async def process_upload(file, session: Session, background_tasks: BackgroundTasks):
+async def process_upload(file, background_tasks: BackgroundTasks):
     try:
         # Generate a unique task ID
         task_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -129,13 +128,13 @@ def get_processing_status(task_id: str):
     return processing_status[task_id]
 
 def create_transcription(transcription: TranscriptionCreate, db: Session):
-    db_transcription = Transcription(**transcription.dict())
+    db_transcription = Transcription(**transcription.model_dump())
     db.add(db_transcription)
     db.commit()
     db.refresh(db_transcription)
     return db_transcription
 
-def process_transcirption(transcription_id: int, db: Session):
+def process_transcription(transcription_id: int, db: Session):
     transcription = db.query(Transcription).filter(Transcription.id == transcription_id).first()
 
     if not transcription:
@@ -143,38 +142,26 @@ def process_transcirption(transcription_id: int, db: Session):
 
     # Generate structured data using OpenAI
     prompt = f"""
-    Read the metting transcript and extract the summery of the transcript. Do not include anything from yur side just understand the metting and give the following. The output should be in JSON:
+You are an expert meeting analyst. Carefully read the following meeting transcript and extract structured information. Only use what is explicitly stated in the transcript — do not add or infer anything.
 
-    Transcript:
-    {transcription.transcript}
+Transcript:
+{transcription.transcript}
 
-    Provide:
-    - A concise title for the meeting.
-    - Key points discussed (as bullet points).
-    - Action items.
-    - Summary
-    - Participants
-    - Add as many points and participants for key_points, actions_items and participate
+Return a JSON object with these exact fields:
+- "title": a concise, descriptive title for the meeting (string)
+- "summary": a 2-4 sentence summary of what was discussed and decided (string)
+- "participants": list of names of people who spoke or were mentioned (array of strings)
+- "key_points": list of the main topics and decisions covered (array of strings, be thorough)
+- "action_items": list of tasks assigned or next steps agreed upon (array of strings, be thorough)
 
-    Example JSON format:
-
-  "title": "title xyz",
-  "key_points": [
-    "key point 1",
-    "key point 2",
-    "key point 3"
-  ],
-  "action_items": [
-    "action items 1",
-    "action items 2",
-    "action items 3",
-  ],
-  "summary" : "summary of the whole meeting",
-  "participants" : [
-  "Person 1",
-  "person 2"
-  ]
-
+Example format:
+{{
+  "title": "Q3 Product Roadmap Planning",
+  "summary": "The team reviewed Q2 results and planned the Q3 roadmap. Key decisions were made around feature prioritization and resource allocation.",
+  "participants": ["Alice", "Bob", "Carol"],
+  "key_points": ["Q2 revenue exceeded target by 12%", "Mobile app to be prioritized in Q3"],
+  "action_items": ["Alice to draft technical spec by Friday", "Bob to schedule customer interviews"]
+}}
     """
 
     response = client.chat.completions.create(
@@ -244,12 +231,27 @@ def getMeetings(db: Session, skip: int = 0, limit: int = 5):
 def getMeeting(id: int, db: Session):
     try:
         meeting = db.query(Meeting).filter(Meeting.id == id).first()
-        trello = db.query(Trello).filter(Trello.meeting_id == id).first()
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
-        if trello:
-            meeting.trello = True
-        return meeting
+
+        trello = db.query(Trello).filter(Trello.meeting_id == id).first()
+        transcription = db.query(Transcription).filter(Transcription.id == meeting.transcript_id).first()
+
+        result = {
+            "id": meeting.id,
+            "title": meeting.title,
+            "filename": transcription.file_name if transcription else None,
+            "created_at": meeting.created_at,
+            "summary": meeting.summary,
+            "participants": meeting.participants,
+            "key_points": meeting.key_points,
+            "action_items": meeting.action_items,
+            "transcript": transcription.transcript if transcription else None,
+            "trello": trello is not None,
+        }
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch meeting: {str(e)}")
 
@@ -274,45 +276,39 @@ def deleteMeeting(id: int, db: Session):
 
 def sendMeetingTrello(id: int, db: Session):
     meeting = db.query(Meeting).filter(Meeting.id == id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
 
-    description = f"""
-?? Summary:
-{meeting.summary}
+    existing = db.query(Trello).filter(Trello.meeting_id == id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Meeting already sent to Trello")
 
-?? Key Points:
-{"".join(f"- {p}\n" for p in json.loads(meeting.key_points))}
+    key_points = "".join(f"- {p}\n" for p in json.loads(meeting.key_points))
+    action_items = "".join(f"- {a}\n" for a in json.loads(meeting.action_items))
+    participants = ", ".join(json.loads(meeting.participants))
 
-? Action Items:
-{"".join(f"- {a}\n" for a in json.loads(meeting.action_items))}
-
-?? Participants:
-{", ".join(json.loads(meeting.participants))}
-"""
+    description = f"""## Summary\n{meeting.summary}\n\n## Key Points\n{key_points}\n## Action Items\n{action_items}\n## Participants\n{participants}\n"""
 
     payload = {
-        "idList":  os.getenv("TRELLO_LIST_ID"),
+        "idList": os.getenv("TRELLO_LIST_ID"),
         "name": meeting.title,
         "desc": description,
-        "key":  os.getenv("TRELLO_API_KEY"),
-        "token":  os.getenv("TRELLO_API_TOKEN")
-    }
-    headers = {
-        "Accept": "application/json"
+        "key": os.getenv("TRELLO_API_KEY"),
+        "token": os.getenv("TRELLO_API_TOKEN"),
     }
 
+    try:
+        response = requests.post(
+            "https://api.trello.com/1/cards",
+            params=payload,
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Trello API error: {str(e)}")
 
-    response = requests.post(
-        "https://api.trello.com/1/cards",
-        params=payload,
-        headers = headers
-    )
-
-    response.raise_for_status()
-
-    new_trello = Trello(
-        meeting_id=id
-    )
-
+    new_trello = Trello(meeting_id=id)
     db.add(new_trello)
     db.commit()
     db.refresh(new_trello)

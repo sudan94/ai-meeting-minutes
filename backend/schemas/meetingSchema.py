@@ -9,7 +9,7 @@ class MeetingCreate(MeetingBase):
 class MeetingResponse(MeetingBase):
     id : int
 
-    class config:
-        from_attribute : True # Enable ORM support for SQLAlchemy
+    class Config:
+        from_attributes = True
 
 

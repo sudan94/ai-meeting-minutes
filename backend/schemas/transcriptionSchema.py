@@ -12,5 +12,5 @@ class TranscriptionCreate(TranscriptionBase):
 class TranscriptionResponse(TranscriptionBase):
     id : int
 
-    class config:
-        from_attribute = True # ORM for sql alchmey support
+    class Config:
+        from_attributes = True

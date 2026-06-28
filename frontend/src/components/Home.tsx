@@ -35,6 +35,9 @@ const Home = () => {
     if (!ACCEPTED_TYPES.includes(f.type) && !f.name.match(/\.(mp3|wav|m4a|ogg|webm|flac)$/i)) {
       setError('Please select an audio file (MP3, WAV, M4A, OGG, FLAC)');
       return;
+    }else if (f.size > 24 *1024 * 1024){
+      setError('File size exceeds 25 MB. Please select a smaller file.');
+      return;
     }
     setError(null);
     setFile(f);
@@ -145,11 +148,20 @@ const Home = () => {
                   Drag & drop your audio file here
                 </Typography>
                 <Typography variant="body2" color="text.disabled">
-                  or click to browse — MP3, WAV, M4A, OGG supported
+                  or click to browse — MP3, WAV, M4A, OGG supported aaa
+                </Typography>
+                <Typography variant="body2" color="text.disabled">
+                  Max file size: 25 MB
                 </Typography>
               </>
             )}
           </Box>
+
+          {file && file.size > 24 * 1024 * 1024 && !uploading && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              File is over 25 MB.
+            </Alert>
+          )}
 
           {uploading && (
             <Box sx={{ mt: 2 }}>
@@ -171,7 +183,7 @@ const Home = () => {
             size="large"
             fullWidth
             onClick={handleUpload}
-            disabled={!file || uploading}
+            disabled={!file || uploading || file.size > 24 * 1024 * 1024}
             sx={{ mt: 3 }}
           >
             {uploading ? (

@@ -2,12 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Card,
+  CardActionArea,
   CardContent,
   Typography,
   List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   CircularProgress,
   Alert,
@@ -18,10 +16,11 @@ import {
   DialogContent,
   DialogActions,
   Pagination,
+  Chip,
+  Tooltip,
 } from '@mui/material';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Delete as DeleteIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { Delete as DeleteIcon, MicNone as MicIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
 import { api, Meeting } from '../services/api';
 
 interface ProcessingStatus {
@@ -51,108 +50,68 @@ const MeetingList: React.FC = () => {
       const data = await api.getMeetings(skip, itemsPerPage);
       setMeetings(data.meetings);
       setTotalCount(data.total);
-    } catch (error) {
-      console.error('Error fetching meetings:', error);
-      setError('Failed to fetch meetings');
+    } catch {
+      setError('Failed to fetch meetings. Is the backend running?');
     } finally {
       setLoading(false);
     }
   }, [itemsPerPage]);
 
-  // Initial load of meetings and check for processing tasks
   useEffect(() => {
     const loadInitialData = async () => {
-      try {
-        await fetchMeetings(1);
-
-        // Check for any ongoing processing tasks from localStorage
-        const currentTaskId = localStorage.getItem('currentProcessingTask');
-        if (currentTaskId) {
-          addProcessingTask(currentTaskId);
-          localStorage.removeItem('currentProcessingTask'); // Clear it after adding
-        }
-      } catch (err) {
-        console.error('Initial load error:', err);
-        setError('Failed to load initial data');
+      await fetchMeetings(1);
+      const currentTaskId = localStorage.getItem('currentProcessingTask');
+      if (currentTaskId) {
+        setProcessingTasks({ [currentTaskId]: { status: 'pending', progress: 0 } });
+        localStorage.removeItem('currentProcessingTask');
       }
     };
-
     loadInitialData();
   }, [fetchMeetings]);
 
-  // Fetch meetings when page changes
   useEffect(() => {
     fetchMeetings(page);
   }, [page, fetchMeetings]);
 
-  // Set up interval for checking processing status
   useEffect(() => {
     const taskIds = Object.keys(processingTasks);
-    if (taskIds.length > 0) {
-      const intervalId = setInterval(checkProcessingStatus, 2000);
-      return () => clearInterval(intervalId);
-    }
-  }, [processingTasks]);
+    if (taskIds.length === 0) return;
 
-  const checkProcessingStatus = async () => {
-    const taskIds = Object.keys(processingTasks);
-    for (const taskId of taskIds) {
-      try {
-        const response = await axios.get<ProcessingStatus>(`http://localhost:8000/meeting/processing-status/${taskId}`);
-        console.log('Processing status:', response.data); // Debug log
+    const intervalId = setInterval(async () => {
+      for (const taskId of taskIds) {
+        try {
+          const data = await api.getProcessingStatus(taskId);
 
-        if (response.data.status === 'completed') {
-          // Remove completed task and refresh meetings
-          setProcessingTasks(prev => {
-            const newTasks = { ...prev };
-            delete newTasks[taskId];
-            return newTasks;
-          });
-          await fetchMeetings(page);
-
-          // If we have a meeting ID, navigate to it
-          if (response.data.meeting_id) {
-            navigate(`/meetings/${response.data.meeting_id}`);
+          if (data.status === 'completed') {
+            setProcessingTasks(prev => {
+              const next = { ...prev };
+              delete next[taskId];
+              return next;
+            });
+            await fetchMeetings(page);
+            if (data.meeting_id) navigate(`/meetings/${data.meeting_id}`);
+          } else if (data.status === 'error') {
+            setError(data.error || 'Processing failed');
+            setProcessingTasks(prev => {
+              const next = { ...prev };
+              delete next[taskId];
+              return next;
+            });
+          } else {
+            setProcessingTasks(prev => ({ ...prev, [taskId]: data }));
           }
-        } else if (response.data.status === 'error') {
-          setError(response.data.error || 'Processing failed');
-          // Remove the error task after showing the error
+        } catch {
           setProcessingTasks(prev => {
-            const newTasks = { ...prev };
-            delete newTasks[taskId];
-            return newTasks;
+            const next = { ...prev };
+            delete next[taskId];
+            return next;
           });
-        } else {
-          // Update the task status
-          setProcessingTasks(prev => ({
-            ...prev,
-            [taskId]: response.data
-          }));
         }
-      } catch (err) {
-        console.error('Status check error:', err);
-        // Remove the task if we can't check its status
-        setProcessingTasks(prev => {
-          const newTasks = { ...prev };
-          delete newTasks[taskId];
-          return newTasks;
-        });
       }
-    }
-  };
+    }, 2000);
 
-
-  const addProcessingTask = (taskId: string) => {
-    console.log('Adding processing task:', taskId); // Debug log
-    setProcessingTasks(prev => ({
-      ...prev,
-      [taskId]: { status: 'pending', progress: 0 }
-    }));
-  };
-
-  const handleMeetingClick = (meetingId: number) => {
-    navigate(`/meetings/${meetingId}`);
-  };
+    return () => clearInterval(intervalId);
+  }, [processingTasks, fetchMeetings, navigate, page]);
 
   const handleDeleteClick = (event: React.MouseEvent, meeting: Meeting) => {
     event.stopPropagation();
@@ -164,149 +123,138 @@ const MeetingList: React.FC = () => {
     if (meetingToDelete) {
       try {
         await api.deleteMeeting(meetingToDelete.id);
-        // Refresh the current page after deletion
         await fetchMeetings(page);
-      } catch (error) {
-        console.error('Error deleting meeting:', error);
+      } catch {
+        setError('Failed to delete meeting');
       }
     }
     setDeleteDialogOpen(false);
     setMeetingToDelete(null);
   };
 
-  const handleDeleteCancel = () => {
-    setDeleteDialogOpen(false);
-    setMeetingToDelete(null);
-  };
-
-  const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
-  };
-
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" component="h2">
-          Processed Meetings
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>
+            Meeting Minutes
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {totalCount} recording{totalCount !== 1 ? 's' : ''} processed
+          </Typography>
+        </Box>
         <Button variant="contained" onClick={() => navigate('/')}>
-          Upload New Recording
+          + New Recording
         </Button>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      {/* Show processing tasks */}
       {Object.entries(processingTasks).map(([taskId, status]) => (
-        <Card key={taskId} sx={{ mb: 2 }}>
+        <Card key={taskId} sx={{ mb: 2, border: '1px solid', borderColor: 'primary.light' }}>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Processing: {status.filename || 'New Recording'}
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2" gutterBottom>
-                Status: {status.status}
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={status.progress}
-                sx={{ height: 10, borderRadius: 5 }}
-              />
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Progress: {status.progress}%
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="subtitle2" fontWeight={600}>
+                Processing: {status.filename || 'recording'}
               </Typography>
             </Box>
+            <LinearProgress
+              variant="determinate"
+              value={status.progress}
+              sx={{ height: 6, borderRadius: 3, mb: 0.5 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {status.progress}% — {status.status}
+            </Typography>
           </CardContent>
         </Card>
       ))}
 
-      {/* Show loading spinner only if we're loading AND there are no meetings */}
       {loading && meetings.length === 0 ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
           <CircularProgress />
         </Box>
       ) : meetings.length === 0 && Object.keys(processingTasks).length === 0 ? (
-        <Card>
-          <CardContent>
-            <Typography variant="body1" color="text.secondary" align="center">
-              No meetings processed yet. Upload a recording to get started.
-            </Typography>
-          </CardContent>
+        <Card sx={{ textAlign: 'center', py: 6 }}>
+          <MicIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="body1" color="text.secondary">
+            No meetings yet. Upload a recording to get started.
+          </Typography>
+          <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate('/')}>
+            Upload Recording
+          </Button>
         </Card>
       ) : (
-        <List>
+        <List disablePadding>
           {meetings.map((meeting) => (
-            <Card key={meeting.id} sx={{ mb: 2, cursor: 'pointer' }}>
-              <CardContent>
-                <ListItem
-                  component={Link}
-                  to={`/meetings/${meeting.id}`}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={meeting.title}
-                    secondary={
-                      <>
-                        <Typography component="span" variant="body2" color="text.primary">
-                          Status: {meeting.status}
-                        </Typography>
-                        <br />
-                        <Typography component="span" variant="body2" color="text.secondary">
-                          Processed: {new Date(meeting.created_at).toLocaleString()}
-                        </Typography>
-                      </>
-                    }
+            <Card key={meeting.id} sx={{ mb: 2 }}>
+              <CardActionArea onClick={() => navigate(`/meetings/${meeting.id}`)}>
+                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="subtitle1" fontWeight={600} noWrap>
+                      {meeting.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" noWrap>
+                      {meeting.filename}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(meeting.created_at).toLocaleString()}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    icon={<CheckCircleIcon />}
+                    label="Completed"
+                    color="success"
+                    size="small"
+                    variant="outlined"
                   />
-                  <ListItemSecondaryAction>
+                  {meeting.trello && (
+                    <Chip label="Trello" color="primary" size="small" variant="outlined" />
+                  )}
+                  <Tooltip title="Delete meeting">
                     <IconButton
-                      edge="end"
-                      aria-label="delete"
+                      size="small"
                       onClick={(e) => handleDeleteClick(e, meeting)}
+                      sx={{ color: 'text.secondary' }}
                     >
-                      <DeleteIcon />
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              </CardContent>
+                  </Tooltip>
+                </CardContent>
+              </CardActionArea>
             </Card>
           ))}
         </List>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
           <Pagination
             count={totalPages}
             page={page}
-            onChange={handlePageChange}
+            onChange={(_, value) => setPage(value)}
             color="primary"
-            size="large"
           />
         </Box>
       )}
 
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-      >
-        <DialogTitle>Delete Meeting</DialogTitle>
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete meeting?</DialogTitle>
         <DialogContent>
-          Are you sure you want to delete this meeting? This action cannot be undone.
+          <Typography>
+            "<strong>{meetingToDelete?.title}</strong>" will be permanently deleted. This cannot be undone.
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button onClick={handleDeleteConfirm} color="error">
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
             Delete
           </Button>
         </DialogActions>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal, engine
-from models.models import Transcription, Meeting
+from models.models import Transcription, Meeting, TranscriptionVector
 from routers import meeting
 import uvicorn
 import sys
@@ -15,6 +15,7 @@ if sys.platform == "win32":
 # create table is its not created
 Meeting.metadata.create_all(bind=engine)
 Transcription.metadata.create_all(bind=engine)
+TranscriptionVector.metadata.create_all(bind=engine)
 app = FastAPI()
 
 origins = [

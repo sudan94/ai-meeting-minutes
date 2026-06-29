@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, Text, DateTime, String, ForeignKey, Interval
+from pgvector.sqlalchemy import Vector
 from database import Base
 from datetime import datetime
 
@@ -31,3 +32,9 @@ class Trello(Base):
     id = Column(Integer, primary_key= True, index= True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
 
+class TranscriptionVector(Base):
+    __tablename__ = "transcription_vectors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transcription_id = Column(Integer, ForeignKey("transcriptions.id"), nullable=False)
+    vector = Column(Vector(1536), nullable=False)

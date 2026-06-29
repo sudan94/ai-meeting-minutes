@@ -314,3 +314,5 @@ def sendMeetingTrello(id: int, db: Session):
     db.refresh(new_trello)
     return {"status": "created"}
 
+
+

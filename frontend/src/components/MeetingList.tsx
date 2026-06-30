@@ -18,10 +18,17 @@ import {
   Pagination,
   Chip,
   Tooltip,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { Delete as DeleteIcon, MicNone as MicIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
-import { api, Meeting } from '../services/api';
+import {
+  Delete as DeleteIcon,
+  MicNone as MicIcon,
+  CheckCircle as CheckCircleIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
+import { api, Meeting, SearchResult } from '../services/api';
 
 interface ProcessingStatus {
   status: string;
@@ -40,6 +47,9 @@ const MeetingList: React.FC = () => {
   const [meetingToDelete, setMeetingToDelete] = useState<Meeting | null>(null);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const itemsPerPage = 5;
   const navigate = useNavigate();
 
@@ -113,6 +123,26 @@ const MeetingList: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [processingTasks, fetchMeetings, navigate, page]);
 
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await api.searchMeetings(searchQuery);
+        setSearchResults(results);
+      } catch (err: any) {
+        setSearchResults([]);
+        setError(err?.response?.data?.detail || 'Search failed — check the backend logs');
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const handleDeleteClick = (event: React.MouseEvent, meeting: Meeting) => {
     event.stopPropagation();
     setMeetingToDelete(meeting);
@@ -150,6 +180,21 @@ const MeetingList: React.FC = () => {
         </Button>
       </Box>
 
+      <TextField
+        fullWidth
+        placeholder="Search meetings by topic, keyword, or question…"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        sx={{ mb: 3 }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              {searching ? <CircularProgress size={18} /> : <SearchIcon color="action" />}
+            </InputAdornment>
+          ),
+        }}
+      />
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
@@ -177,7 +222,57 @@ const MeetingList: React.FC = () => {
         </Card>
       ))}
 
-      {loading && meetings.length === 0 ? (
+      {searchQuery.trim() ? (
+        /* ── Search results ── */
+        searching ? null : searchResults.length === 0 ? (
+          <Card sx={{ textAlign: 'center', py: 5 }}>
+            <Typography color="text.secondary">No matching meetings found.</Typography>
+          </Card>
+        ) : (
+          <List disablePadding>
+            {searchResults.map((result) => (
+              <Card key={result.meeting_id} sx={{ mb: 2 }}>
+                <CardActionArea onClick={() => navigate(`/meetings/${result.meeting_id}`)}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Typography variant="subtitle1" fontWeight={600} sx={{ flex: 1 }}>
+                        {result.title}
+                      </Typography>
+                      <Chip
+                        label={`${Math.round(result.score * 100)}% match`}
+                        size="small"
+                        color={result.score >= 0.8 ? 'success' : result.score >= 0.6 ? 'primary' : 'default'}
+                        variant="outlined"
+                      />
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      {new Date(result.created_at).toLocaleString()}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        bgcolor: 'action.hover',
+                        borderRadius: 1,
+                        px: 1.5,
+                        py: 1,
+                        fontStyle: 'italic',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      "{result.chunk_text}"
+                    </Typography>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            ))}
+          </List>
+        )
+      ) : loading && meetings.length === 0 ? (
+        /* ── Normal list ── */
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
           <CircularProgress />
         </Box>
@@ -192,57 +287,59 @@ const MeetingList: React.FC = () => {
           </Button>
         </Card>
       ) : (
-        <List disablePadding>
-          {meetings.map((meeting) => (
-            <Card key={meeting.id} sx={{ mb: 2 }}>
-              <CardActionArea onClick={() => navigate(`/meetings/${meeting.id}`)}>
-                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle1" fontWeight={600} noWrap>
-                      {meeting.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" noWrap>
-                      {meeting.filename}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(meeting.created_at).toLocaleString()}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    icon={<CheckCircleIcon />}
-                    label="Completed"
-                    color="success"
-                    size="small"
-                    variant="outlined"
-                  />
-                  {meeting.trello && (
-                    <Chip label="Trello" color="primary" size="small" variant="outlined" />
-                  )}
-                  <Tooltip title="Delete meeting">
-                    <IconButton
+        <>
+          <List disablePadding>
+            {meetings.map((meeting) => (
+              <Card key={meeting.id} sx={{ mb: 2 }}>
+                <CardActionArea onClick={() => navigate(`/meetings/${meeting.id}`)}>
+                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="subtitle1" fontWeight={600} noWrap>
+                        {meeting.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {meeting.filename}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(meeting.created_at).toLocaleString()}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      icon={<CheckCircleIcon />}
+                      label="Completed"
+                      color="success"
                       size="small"
-                      onClick={(e) => handleDeleteClick(e, meeting)}
-                      sx={{ color: 'text.secondary' }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          ))}
-        </List>
-      )}
+                      variant="outlined"
+                    />
+                    {meeting.trello && (
+                      <Chip label="Trello" color="primary" size="small" variant="outlined" />
+                    )}
+                    <Tooltip title="Delete meeting">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleDeleteClick(e, meeting)}
+                        sx={{ color: 'text.secondary' }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            ))}
+          </List>
 
-      {totalPages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
-          <Pagination
-            count={totalPages}
-            page={page}
-            onChange={(_, value) => setPage(value)}
-            color="primary"
-          />
-        </Box>
+          {totalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(_, value) => setPage(value)}
+                color="primary"
+              />
+            </Box>
+          )}
+        </>
       )}
 
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>

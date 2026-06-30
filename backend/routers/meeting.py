@@ -34,6 +34,10 @@ def delete_meeting(id: int, session: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Meeting not found")
     return {"message": "Meeting deleted successfully"}
 
+@router.get("/search")
+def search_meetings(q: str = "", limit: int = 5, session: Session = Depends(get_db)):
+    return meetingController.searchMeetings(q, session, limit)
+
 @router.get("/send_to_trello/{id}")
 def send_to_trello(id:int, session: Session = Depends(get_db)):
     return meetingController.sendMeetingTrello(id, session)

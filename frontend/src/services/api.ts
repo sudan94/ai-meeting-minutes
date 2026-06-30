@@ -20,6 +20,15 @@ export interface MeetingsResponse {
   meetings: Meeting[];
 }
 
+export interface SearchResult {
+  meeting_id: number;
+  title: string;
+  summary: string;
+  created_at: string;
+  chunk_text: string;
+  score: number;
+}
+
 export const api = {
   async uploadAudio(file: File): Promise<{ task_id: string; message: string; status: string }> {
     const formData = new FormData();
@@ -48,6 +57,13 @@ export const api = {
 
   async sendToTrello(id: number): Promise<void> {
     await axios.get(`${API_BASE_URL}/send_to_trello/${id}`);
+  },
+
+  async searchMeetings(query: string, limit: number = 5): Promise<SearchResult[]> {
+    const response = await axios.get<SearchResult[]>(`${API_BASE_URL}/search`, {
+      params: { q: query, limit },
+    });
+    return response.data;
   },
 
   async getProcessingStatus(taskId: string): Promise<{

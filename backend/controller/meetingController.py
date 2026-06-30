@@ -278,6 +278,58 @@ def deleteMeeting(id: int, db: Session):
     db.commit()
     return True
 
+def searchMeetings(query: str, db: Session, limit: int = 5):
+    if not query.strip():
+        return []
+
+    try:
+        response = client.embeddings.create(
+            model="text-embedding-3-large",
+            input=[query],
+        )
+        query_vector = response.data[0].embedding
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to embed query: {str(e)}")
+
+    distance_expr = TranscriptionVector.vector.cosine_distance(query_vector).label("distance")
+
+    try:
+        rows = (
+            db.query(
+                Meeting.id,
+                Meeting.title,
+                Meeting.summary,
+                Meeting.created_at,
+                TranscriptionVector.chunk_text,
+                distance_expr,
+            )
+            .join(Transcription, Meeting.transcript_id == Transcription.id)
+            .join(TranscriptionVector, TranscriptionVector.transcription_id == Transcription.id)
+            .filter(distance_expr <= 0.7)
+            .order_by(distance_expr)
+            .limit(limit * 3)
+            .all()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Vector search query failed: {str(e)}")
+
+    # One result per meeting — keep the chunk with the lowest distance
+    seen: dict = {}
+    for row in rows:
+        meeting_id = row[0]
+        if meeting_id not in seen:
+            seen[meeting_id] = {
+                "meeting_id": row[0],
+                "title": row[1],
+                "summary": row[2],
+                "created_at": row[3],
+                "chunk_text": row[4],
+                "score": round(1 - row[5], 4),
+            }
+
+    return list(seen.values())[:limit]
+
+
 def sendMeetingTrello(id: int, db: Session):
     meeting = db.query(Meeting).filter(Meeting.id == id).first()
     if not meeting:

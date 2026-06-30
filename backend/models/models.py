@@ -37,4 +37,6 @@ class TranscriptionVector(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     transcription_id = Column(Integer, ForeignKey("transcriptions.id"), nullable=False)
-    vector = Column(Vector(1536), nullable=False)
+    chunk_index = Column(Integer, nullable=False, default=0)
+    chunk_text = Column(Text, nullable=False, default="")
+    vector = Column(Vector(3072), nullable=False)

@@ -1,6 +1,6 @@
 from fastapi import HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from models.models import Transcription, Meeting, Trello
+from models.models import Transcription, Meeting, Trello, TranscriptionVector
 from schemas.transcriptionSchema import TranscriptionCreate
 from database import SessionLocal
 from openai import OpenAI
@@ -12,6 +12,7 @@ from typing import Dict
 import uuid
 from pathlib import Path
 import requests
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
@@ -65,6 +66,9 @@ async def process_upload_background(file_content: bytes, filename: str, task_id:
 
         stored_transcription = create_transcription(transcription_data, db)
         processing_status[task_id]["progress"] = 70
+
+        transcrpitToVector(stored_transcription.id, db)
+        processing_status[task_id]["progress"] = 80
 
         transcript = process_transcription(stored_transcription.id, db)
         processing_status[task_id]["progress"] = 90
@@ -315,4 +319,33 @@ def sendMeetingTrello(id: int, db: Session):
     return {"status": "created"}
 
 
+def transcrpitToVector(id: int, db: Session):
 
+    transcription = db.query(Transcription).filter(Transcription.id == id).first()
+    if not transcription:
+        raise HTTPException(status_code=404, detail="Transcription not found")
+
+    splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=150
+    )
+
+    chunks = splitter.split_text(transcription.transcript)
+
+
+    try:
+        response = client.embeddings.create(
+            model="text-embedding-3-large",
+            input=chunks
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {str(e)}")
+
+    for i, embedding_obj in enumerate(response.data):
+        db.add(TranscriptionVector(
+            transcription_id=id,
+            chunk_index=i,
+            chunk_text=chunks[i],
+            vector=embedding_obj.embedding,
+        ))
+    db.commit()
